@@ -11,21 +11,20 @@ const REFERENCE_CONSISTENCY_SUFFIX =
   "Keep the same dog's fur color, face shape, and markings as the reference image consistently across all 4 panels.";
 
 const SPEECH_BUBBLE_INSTRUCTION =
-  "For each panel, draw a professional webtoon-style speech bubble containing that panel's dialogue: rounded bubble shape, positioned in empty background space (not overlapping the dog's face), with the speech bubble tail pointing toward the speaking character. Render the given dialogue text clearly and legibly inside each bubble.";
+  "For each panel, draw one empty rounded speech bubble shape: a blank white bubble with no text, letters, or writing inside it, positioned in the upper area of empty background space (not overlapping the dog's face), with a small triangular tail pointing toward the speaking character. Keep every bubble's interior completely blank — the dialogue text will be added separately outside the image, so do not render any characters or writing inside the bubbles.";
 
 type Quad = [string, string, string, string];
 
-/** 4개의 scene_en + dialogue_ko를 하나의 2x2 그리드 이미지 프롬프트로 합친다.
- * 말풍선(대사 포함)은 모델이 장면에 맞춰 직접 그려 넣는다. */
-function buildGridPrompt(scenes: Quad, dialogues: Quad, hasReference: boolean): string {
+/** 4개의 scene_en으로 하나의 2x2 그리드 이미지 프롬프트를 만든다.
+ * 대사(dialogue_ko)는 AI가 그리지 않는다 — 한글 텍스트 렌더링이 부정확해서,
+ * 빈 말풍선 "모양"만 그리게 하고 실제 텍스트는 화면에서 HTML/CSS로 오버레이한다. */
+function buildGridPrompt(scenes: Quad, hasReference: boolean): string {
   const labels = ["top-left", "top-right", "bottom-left", "bottom-right"];
   const parts = [
     "A single square image divided into an even 2x2 grid of 4 panels, with a thin white border separating each panel.",
     hasReference ? REFERENCE_CONSISTENCY_SUFFIX : "",
     SPEECH_BUBBLE_INSTRUCTION,
-    ...scenes.map(
-      (scene, i) => `Panel ${i + 1} (${labels[i]}): ${scene} Speech bubble dialogue: "${dialogues[i]}"`,
-    ),
+    ...scenes.map((scene, i) => `Panel ${i + 1} (${labels[i]}): ${scene}`),
   ];
   return parts.filter(Boolean).join(" ");
 }
@@ -102,11 +101,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const prompt = buildGridPrompt(
-    scenes as [string, string, string, string],
-    dialogues as [string, string, string, string],
-    referenceImages.length > 0,
-  );
+  const prompt = buildGridPrompt(scenes as [string, string, string, string], referenceImages.length > 0);
 
   try {
     const { prediction, usage } = await runPrediction(

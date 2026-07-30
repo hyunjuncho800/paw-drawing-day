@@ -10,6 +10,15 @@ const MAX_PHOTOS = 2;
 const MAX_DIARY_LENGTH = 150;
 const DOG_PHOTOS_BUCKET = "dog-photos";
 
+/** 2x2 그리드의 각 분면 상단에 말풍선을 겹쳐 그리기 위한 위치(%).
+ * AI에게도 같은 위치(패널 상단)에 빈 말풍선 모양을 그리도록 프롬프트로 지시해서 서로 맞춘다. */
+const BUBBLE_POSITIONS = [
+  { top: "5%", left: "5%", right: "53%" },
+  { top: "5%", left: "53%", right: "5%" },
+  { top: "55%", left: "5%", right: "53%" },
+  { top: "55%", left: "53%", right: "5%" },
+];
+
 type Photo = {
   id: string;
   url: string;
@@ -72,6 +81,7 @@ export default function ComicCreatorApp({
 
   const remainingSlots = MAX_PHOTOS - photos.length;
   const hasProfilePhoto = Boolean(profile.photo_url);
+  const sortedComicPanels = comic ? comic.panels.slice().sort((a, b) => a.panel - b.panel) : [];
   const isFormValid =
     dogName.trim().length > 0 &&
     diary.trim().length > 0 &&
@@ -528,6 +538,20 @@ export default function ComicCreatorApp({
                     alt={`${comic.title} 2x2 그리드`}
                     className="h-full w-full object-cover"
                   />
+                  {/* 대사는 AI가 그리지 않고, 이 위에 HTML/CSS로 말풍선을 겹쳐서 표시한다
+                      (한글 텍스트를 AI 이미지 안에 직접 렌더링하면 글자가 깨진다). */}
+                  {sortedComicPanels.map((panel, i) => (
+                    <div
+                      key={panel.panel}
+                      className="pointer-events-none absolute flex justify-center"
+                      style={BUBBLE_POSITIONS[i]}
+                    >
+                      <div className="relative max-w-full rounded-xl border border-[#e8d9d2] bg-white/95 px-2.5 py-1.5 text-center text-[10px] font-diary leading-snug text-[#4a3b32] shadow-sm sm:px-3 sm:py-2 sm:text-sm">
+                        {panel.dialogue_ko}
+                        <span className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-[7px] border-t-[9px] border-x-transparent border-t-white/95" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {gridResult.usage && (
