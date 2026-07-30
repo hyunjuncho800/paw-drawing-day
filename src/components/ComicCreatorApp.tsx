@@ -26,32 +26,6 @@ type Comic = {
   keywords: string[];
 };
 
-type PanelImage = {
-  panel: number;
-  url?: string;
-  error?: string;
-};
-
-type ModelKey = "flux-2-pro" | "nano-banana";
-
-const MODEL_KEYS: ModelKey[] = ["flux-2-pro", "nano-banana"];
-
-const MODEL_LABELS: Record<ModelKey, string> = {
-  "flux-2-pro": "🟣 Flux 2 Pro",
-  "nano-banana": "🍌 Nano Banana (Gemini 2.5 Flash Image)",
-};
-
-type ModelState = {
-  images: PanelImage[] | null;
-  isLoading: boolean;
-  error: string;
-};
-
-const createInitialModelResults = (): Record<ModelKey, ModelState> => ({
-  "flux-2-pro": { images: null, isLoading: false, error: "" },
-  "nano-banana": { images: null, isLoading: false, error: "" },
-});
-
 type GridUsage = {
   tokens: number | null;
   predictSeconds: number | null;
@@ -90,16 +64,16 @@ export default function ComicCreatorApp({
   const [isLoading, setIsLoading] = useState(false);
   const [comic, setComic] = useState<Comic | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [modelResults, setModelResults] = useState<Record<ModelKey, ModelState>>(
-    createInitialModelResults(),
-  );
   const [gridResult, setGridResult] = useState<GridImageState>(createInitialGridResult());
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const remainingSlots = MAX_PHOTOS - photos.length;
+  const hasProfilePhoto = Boolean(profile.photo_url);
   const isFormValid =
-    dogName.trim().length > 0 && diary.trim().length > 0 && photos.length > 0;
+    dogName.trim().length > 0 &&
+    diary.trim().length > 0 &&
+    (photos.length > 0 || hasProfilePhoto);
 
   const addPhotos = (fileList: FileList | null) => {
     if (!fileList || remainingSlots <= 0) return;
@@ -143,53 +117,6 @@ export default function ComicCreatorApp({
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     });
-
-  const generateImages = async (
-    model: ModelKey,
-    scenes: string[],
-    referenceImages: string[],
-  ) => {
-    setModelResults((prev) => ({
-      ...prev,
-      [model]: { images: null, isLoading: true, error: "" },
-    }));
-
-    try {
-      const response = await fetch("/api/generate-images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenes, referenceImages, model }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setModelResults((prev) => ({
-          ...prev,
-          [model]: {
-            images: null,
-            isLoading: false,
-            error: data.error ?? "그림을 만들지 못했어요.",
-          },
-        }));
-        return;
-      }
-
-      setModelResults((prev) => ({
-        ...prev,
-        [model]: { images: data.images, isLoading: false, error: "" },
-      }));
-    } catch {
-      setModelResults((prev) => ({
-        ...prev,
-        [model]: {
-          images: null,
-          isLoading: false,
-          error: "이미지 서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요.",
-        },
-      }));
-    }
-  };
 
   const generateGridImage = async (
     scenes: string[],
@@ -305,7 +232,6 @@ export default function ComicCreatorApp({
     setIsLoading(true);
     setErrorMessage("");
     setComic(null);
-    setModelResults(createInitialModelResults());
     setGridResult(createInitialGridResult());
     setSaveStatus("idle");
 
@@ -326,25 +252,21 @@ export default function ComicCreatorApp({
       const newComic: Comic = data.comic;
       setComic(newComic);
 
-      // 처음 업로드한 사진(들)을 참고 이미지로 — 4컷·모델 두 곳 모두 동일한 사진을 사용한다.
-      const referenceImages = await Promise.all(
+      // 프로필에 등록해둔 대표 사진을 우선 참고 이미지로 쓰고, 이번에 새로 올린 사진(들)을 이어 붙인다.
+      const uploadedReferenceImages = await Promise.all(
         photos.map((photo) => fileToDataUrl(photo.file)),
       );
+      const referenceImages = profile.photo_url
+        ? [profile.photo_url, ...uploadedReferenceImages]
+        : uploadedReferenceImages;
       const sortedPanels = newComic.panels.slice().sort((a, b) => a.panel - b.panel);
       const scenes = sortedPanels.map((p) => p.scene_en);
       const dialogues = sortedPanels.map((p) => p.dialogue_ko);
 
-      // 새 방식: 2x2 그리드 1장을 한 번의 API 호출로 생성하고, 성공하면 자동 저장한다.
-      void (async () => {
-        const gridImage = await generateGridImage(scenes, dialogues, referenceImages);
-        if (gridImage) {
-          void saveComicEntry(dogName, diary, newComic, gridImage);
-        }
-      })();
-
-      // 참고용: 이전 방식(모델별 개별 4회 호출)도 같이 돌려서 품질을 비교할 수 있게 남겨둔다.
-      for (const key of MODEL_KEYS) {
-        void generateImages(key, scenes, referenceImages);
+      // 2x2 그리드 1장을 한 번의 API 호출로 생성하고, 성공하면 자동 저장한다.
+      const gridImage = await generateGridImage(scenes, dialogues, referenceImages);
+      if (gridImage) {
+        void saveComicEntry(dogName, diary, newComic, gridImage);
       }
     } catch {
       setErrorMessage("서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요.");
@@ -443,6 +365,11 @@ export default function ComicCreatorApp({
                 ({photos.length}/{MAX_PHOTOS})
               </span>
             </label>
+            {hasProfilePhoto && (
+              <p className="mb-2 text-xs text-[#8fae8f]">
+                🐾 등록해둔 프로필 사진이 자동으로 참고 이미지로 사용돼요. 추가로 사진을 올리면 함께 참고해요.
+              </p>
+            )}
 
             {photos.length > 0 && (
               <div className="mb-3 grid grid-cols-2 gap-3">
@@ -555,13 +482,12 @@ export default function ComicCreatorApp({
       {/* 결과 */}
       {comic && (
         <div className="relative z-10 mt-6 flex w-full max-w-3xl flex-col gap-6">
-          {/* 새 방식: 2x2 그리드 1장을 API 1회 호출로 생성 */}
           <section className="rounded-[2rem] border border-[#f6dfe4] bg-white/80 p-6 shadow-[0_10px_40px_-15px_rgba(200,150,160,0.4)] backdrop-blur-sm sm:p-9">
             <h2 className="mb-1 font-diary text-3xl text-[#8a5a44]">
               🎬 {comic.title}
             </h2>
             <p className="mb-6 text-xs text-[#c9a9a0]">
-              🆕 2x2 그리드 한 장으로 생성 · API 호출 1회 (Nano Banana)
+              2x2 그리드 한 장으로 생성 · API 호출 1회 (Nano Banana)
             </p>
 
             {gridResult.isLoading && (
@@ -621,79 +547,6 @@ export default function ComicCreatorApp({
                 </p>
               </>
             )}
-          </section>
-
-          {/* 참고용: 이전 방식(모델별 개별 4회 호출) — 품질 비교용 */}
-          <section className="rounded-[2rem] border border-[#f6dfe4] bg-white/60 p-6 shadow-[0_10px_40px_-15px_rgba(200,150,160,0.3)] backdrop-blur-sm sm:p-9">
-            <h3 className="mb-1 text-lg font-bold text-[#8a5a44]">
-              📎 참고 — 이전 방식 (모델별 개별 4회 호출)
-            </h3>
-            <p className="mb-6 text-xs text-[#c9a9a0]">
-              위 그리드 결과와 디테일을 비교해볼 수 있어요
-            </p>
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {MODEL_KEYS.map((key) => {
-                const result = modelResults[key];
-                return (
-                  <div key={key}>
-                    <h4 className="mb-2 text-sm font-bold text-[#8a5a44]">
-                      {MODEL_LABELS[key]}
-                    </h4>
-
-                    {result.isLoading && (
-                      <div className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-[#fff3e4] px-4 py-10 text-center">
-                        <span className="h-8 w-8 animate-spin rounded-full border-4 border-[#f2c877]/40 border-t-[#f2c877]" />
-                        <p className="text-sm font-semibold text-[#8a5a44]">
-                          4컷 그림을 그리고 있어요 🎨
-                        </p>
-                        <p className="text-xs text-[#c9a9a0]">보통 10~40초 정도 걸려요</p>
-                      </div>
-                    )}
-
-                    {result.error && (
-                      <p className="rounded-2xl bg-[#ffeef0] px-4 py-3 text-center text-sm text-[#c25d70]">
-                        😢 {result.error}
-                      </p>
-                    )}
-
-                    {result.images && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {result.images.map((img) => {
-                          const dialogue = comic.panels.find(
-                            (p) => p.panel === img.panel,
-                          )?.dialogue_ko;
-                          return (
-                            <div
-                              key={img.panel}
-                              className="overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]"
-                            >
-                              {img.url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={img.url}
-                                  alt={`${img.panel}컷: ${dialogue ?? ""}`}
-                                  className="aspect-square w-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex aspect-square items-center justify-center p-3 text-center text-xs text-[#c25d70]">
-                                  😢 {img.error ?? "생성 실패"}
-                                </div>
-                              )}
-                              {dialogue && (
-                                <p className="px-2 py-1.5 text-center text-xs text-[#5c4438]">
-                                  {dialogue}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           </section>
 
           <section className="rounded-[2rem] border border-[#f6dfe4] bg-white/60 p-6 shadow-[0_10px_40px_-15px_rgba(200,150,160,0.3)] backdrop-blur-sm sm:p-9">

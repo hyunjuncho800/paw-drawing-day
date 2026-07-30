@@ -5,6 +5,8 @@ import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import type { Profile } from "@/hooks/useAuthProfile";
 
+const DOG_PHOTOS_BUCKET = "dog-photos";
+
 const TRAIT_OPTIONS = [
   "활발함",
   "겁많음",
@@ -46,6 +48,8 @@ export default function OnboardingScreen({
   const [dogName, setDogName] = useState("");
   const [dogBreed, setDogBreed] = useState("");
   const [selectedTraits, setSelectedTraits] = useState<Set<string>>(new Set());
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -61,6 +65,12 @@ export default function OnboardingScreen({
     });
   };
 
+  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setPhotoFile(file);
+    setPhotoPreviewUrl(file ? URL.createObjectURL(file) : "");
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!dogName.trim() || isSubmitting) return;
@@ -69,16 +79,49 @@ export default function OnboardingScreen({
     setErrorMessage("");
 
     const supabase = getSupabaseBrowserClient();
+
+    // 매직링크 리다이렉트 직후 세션이 아직 완전히 붙지 않은 상태로 제출될 수 있어,
+    // prop으로 받은 session을 그대로 믿지 않고 제출 시점에 다시 확인한다.
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const currentSession = sessionData.session ?? session;
+
+    if (sessionError || !currentSession) {
+      setIsSubmitting(false);
+      setErrorMessage("로그인 세션이 만료됐어요. 새로고침 후 다시 로그인해주세요.");
+      return;
+    }
+
+    let photoUrl: string | null = null;
+
+    if (photoFile) {
+      const ext = photoFile.name.split(".").pop() || "jpg";
+      const path = `${currentSession.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(DOG_PHOTOS_BUCKET)
+        .upload(path, photoFile, { upsert: false });
+
+      if (uploadError) {
+        setIsSubmitting(false);
+        setErrorMessage(`사진 업로드에 실패했어요: ${uploadError.message}`);
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(DOG_PHOTOS_BUCKET).getPublicUrl(path);
+      photoUrl = publicUrlData.publicUrl;
+    }
+
     const { data, error } = await supabase
       .from("profiles")
       .insert({
-        id: session.user.id,
-        email: session.user.email ?? "",
+        id: currentSession.user.id,
+        email: currentSession.user.email ?? "",
         dog_name: dogName.trim(),
         dog_breed: dogBreed.trim() || null,
         dog_traits: Array.from(selectedTraits),
+        photo_url: photoUrl,
       })
-      .select("id, email, dog_name, dog_breed, dog_traits, created_at")
+      .select("id, email, dog_name, dog_breed, dog_traits, photo_url, created_at")
       .single();
 
     setIsSubmitting(false);
@@ -146,6 +189,45 @@ export default function OnboardingScreen({
                 <option key={breed} value={breed} />
               ))}
             </datalist>
+          </div>
+
+          <div>
+            <label
+              htmlFor="onboardingDogPhoto"
+              className="mb-2 flex items-center gap-1.5 text-sm font-bold text-[#8a5a44]"
+            >
+              📷 대표 사진 <span className="font-normal text-[#c9a9a0]">(선택)</span>
+            </label>
+            <div className="flex items-center gap-3">
+              {photoPreviewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoPreviewUrl}
+                  alt="강아지 사진 미리보기"
+                  className="h-16 w-16 flex-shrink-0 rounded-2xl border-2 border-[#cfe8f5] object-cover"
+                />
+              ) : (
+                <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-[#fcdce7] bg-[#fff8fa] text-2xl">
+                  🐶
+                </div>
+              )}
+              <label
+                htmlFor="onboardingDogPhoto"
+                className="cursor-pointer rounded-full border-2 border-[#fcdce7] bg-[#fff8fa] px-4 py-2 text-xs font-semibold text-[#8a5a44] transition hover:bg-[#ffeef4]"
+              >
+                사진 선택하기
+              </label>
+              <input
+                id="onboardingDogPhoto"
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-[#c9a9a0]">
+              등록해두면 앞으로 만화를 만들 때마다 자동으로 참고 사진으로 사용돼요.
+            </p>
           </div>
 
           <div>
