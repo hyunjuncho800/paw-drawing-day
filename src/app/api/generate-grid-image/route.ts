@@ -11,7 +11,7 @@ const REFERENCE_CONSISTENCY_SUFFIX =
   "Keep the same dog's fur color, face shape, and markings as the reference image consistently across all 4 panels.";
 
 const SPEECH_BUBBLE_INSTRUCTION =
-  "For each panel, draw one empty rounded speech bubble shape: a blank white bubble with no text, letters, or writing inside it, positioned in the upper area of empty background space (not overlapping the dog's face), with a small triangular tail pointing toward the speaking character. Keep every bubble's interior completely blank — the dialogue text will be added separately outside the image, so do not render any characters or writing inside the bubbles.";
+  "For each panel, draw one empty rounded speech bubble shape in the exact same location in every panel: horizontally centered, near the top of the panel (roughly the top 15-40% of the panel's height), a blank white bubble with no text, letters, or writing inside it, with a small triangular tail pointing downward toward the character. Keep every bubble's interior completely blank — the dialogue text will be added separately outside the image, so do not render any characters or writing inside the bubbles.";
 
 type Quad = [string, string, string, string];
 

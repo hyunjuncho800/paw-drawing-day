@@ -10,13 +10,14 @@ const MAX_PHOTOS = 2;
 const MAX_DIARY_LENGTH = 150;
 const DOG_PHOTOS_BUCKET = "dog-photos";
 
-/** 2x2 그리드의 각 분면 상단에 말풍선을 겹쳐 그리기 위한 위치(%).
- * AI에게도 같은 위치(패널 상단)에 빈 말풍선 모양을 그리도록 프롬프트로 지시해서 서로 맞춘다. */
+/** 2x2 그리드의 각 분면 상단 중앙에 말풍선을 겹쳐 그리기 위한 위치(%).
+ * AI에게도 매 패널 동일하게 "상단 중앙"에 빈 말풍선 모양을 그리도록 프롬프트로 지시해서
+ * (좌/우가 매번 달라지지 않도록) 위치를 서로 맞춘다. */
 const BUBBLE_POSITIONS = [
-  { top: "5%", left: "5%", right: "53%" },
-  { top: "5%", left: "53%", right: "5%" },
-  { top: "55%", left: "5%", right: "53%" },
-  { top: "55%", left: "53%", right: "5%" },
+  { top: "8%", left: "6%", right: "56%" },
+  { top: "8%", left: "56%", right: "6%" },
+  { top: "58%", left: "6%", right: "56%" },
+  { top: "58%", left: "56%", right: "6%" },
 ];
 
 type Photo = {
