@@ -4,9 +4,11 @@ import { useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import Link from "next/link";
 import type { Profile } from "@/hooks/useAuthProfile";
+import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
 const MAX_PHOTOS = 2;
 const MAX_DIARY_LENGTH = 150;
+const DOG_PHOTOS_BUCKET = "dog-photos";
 
 type Photo = {
   id: string;
@@ -110,13 +112,24 @@ export default function ComicCreatorApp({
     });
   };
 
-  const fileToDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
+  /** 참고 사진을 base64로 요청에 실으면 Vercel의 요청 본문 4.5MB 제한에 걸릴 수 있어서,
+   * Storage에 먼저 올리고 공개 URL만 참고 이미지로 전달한다. */
+  const uploadReferenceImage = async (file: File): Promise<string> => {
+    const supabase = getSupabaseBrowserClient();
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${profile.id}/diary-refs/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(DOG_PHOTOS_BUCKET)
+      .upload(path, file, { contentType: file.type || "image/jpeg", upsert: true });
+
+    if (uploadError) {
+      throw new Error(`사진 업로드에 실패했어요: ${uploadError.message}`);
+    }
+
+    const { data } = supabase.storage.from(DOG_PHOTOS_BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  };
 
   const generateGridImage = async (
     scenes: string[],
@@ -254,7 +267,7 @@ export default function ComicCreatorApp({
 
       // 프로필에 등록해둔 대표 사진을 우선 참고 이미지로 쓰고, 이번에 새로 올린 사진(들)을 이어 붙인다.
       const uploadedReferenceImages = await Promise.all(
-        photos.map((photo) => fileToDataUrl(photo.file)),
+        photos.map((photo) => uploadReferenceImage(photo.file)),
       );
       const referenceImages = profile.photo_url
         ? [profile.photo_url, ...uploadedReferenceImages]
