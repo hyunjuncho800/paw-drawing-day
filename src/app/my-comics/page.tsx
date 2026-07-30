@@ -5,12 +5,15 @@ import Link from "next/link";
 import { useAuthProfile } from "@/hooks/useAuthProfile";
 import LoginScreen from "@/components/LoginScreen";
 import OnboardingScreen from "@/components/OnboardingScreen";
+import { ComicGrid, type ComicPanel } from "@/components/ComicGrid";
+
+type ComicJson = { title?: string; panels?: ComicPanel[] } | null;
 
 type ComicEntry = {
   id: string;
   dog_name: string;
   diary_text: string;
-  comic_json: { title?: string } | null;
+  comic_json: ComicJson;
   image_url: string | null;
   created_at: string;
 };
@@ -32,10 +35,74 @@ function LoadingScreen() {
   );
 }
 
+/** 목록에서 클릭한 만화를 원본 크기로 크게 보여주는 모달.
+ * 미리보기는 대사/일기 텍스트를 2줄로 잘라 보여주지만, 여기서는 전체가 다 보인다. */
+function ComicDetailModal({ entry, onClose }: { entry: ComicEntry; onClose: () => void }) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[2rem] bg-white p-5 shadow-2xl sm:p-6"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs text-[#c9a9a0]">{formatDate(entry.created_at)}</p>
+            <h2 className="font-diary text-2xl text-[#8a5a44]">
+              🐶 {entry.dog_name}
+              {entry.comic_json?.title ? ` · ${entry.comic_json.title}` : ""}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#fff3e4] text-[#8a5a44] transition hover:bg-[#ffeef4]"
+          >
+            ✕
+          </button>
+        </div>
+
+        {entry.image_url && entry.comic_json?.panels ? (
+          <ComicGrid
+            imageUrl={entry.image_url}
+            panels={entry.comic_json.panels}
+            title={entry.comic_json?.title ?? entry.dog_name}
+          />
+        ) : entry.image_url ? (
+          <div className="aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={entry.image_url}
+              alt={entry.comic_json?.title ?? entry.dog_name}
+              className="h-full w-full object-cover"
+            />
+          </div>
+        ) : null}
+
+        <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-[#5c4438]">
+          {entry.diary_text}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ComicsList({ accessToken }: { accessToken: string }) {
   const [entries, setEntries] = useState<ComicEntry[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedEntry, setSelectedEntry] = useState<ComicEntry | null>(null);
 
   useEffect(() => {
     fetch("/api/my-comics", {
@@ -106,18 +173,30 @@ function ComicsList({ accessToken }: { accessToken: string }) {
         {!isLoading && !error && entries && entries.length > 0 && (
           <div className="flex flex-col gap-4">
             {entries.map((entry) => (
-              <div
+              <button
                 key={entry.id}
-                className="flex gap-4 rounded-[2rem] border border-[#f6dfe4] bg-white/80 p-4 shadow-[0_10px_40px_-15px_rgba(200,150,160,0.4)] backdrop-blur-sm sm:p-5"
+                type="button"
+                onClick={() => setSelectedEntry(entry)}
+                className="flex gap-4 rounded-[2rem] border border-[#f6dfe4] bg-white/80 p-4 text-left shadow-[0_10px_40px_-15px_rgba(200,150,160,0.4)] backdrop-blur-sm transition hover:bg-white sm:p-5"
               >
-                <div className="aspect-square w-24 flex-shrink-0 overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd] sm:w-32">
-                  {entry.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={entry.image_url}
-                      alt={entry.comic_json?.title ?? entry.dog_name}
-                      className="h-full w-full object-cover"
+                <div className="w-24 flex-shrink-0 sm:w-32">
+                  {entry.image_url && entry.comic_json?.panels ? (
+                    <ComicGrid
+                      imageUrl={entry.image_url}
+                      panels={entry.comic_json.panels}
+                      title={entry.comic_json?.title ?? entry.dog_name}
+                      textSizeClassName="text-[4px] leading-[1.1] sm:text-[5px]"
+                      captionPaddingClassName="px-0.5 pb-0.5"
                     />
+                  ) : entry.image_url ? (
+                    <div className="aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={entry.image_url}
+                        alt={entry.comic_json?.title ?? entry.dog_name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
                   ) : null}
                 </div>
                 <div className="flex flex-1 flex-col justify-center">
@@ -128,11 +207,15 @@ function ComicsList({ accessToken }: { accessToken: string }) {
                   </h2>
                   <p className="mt-1 line-clamp-2 text-sm text-[#5c4438]">{entry.diary_text}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
       </main>
+
+      {selectedEntry && (
+        <ComicDetailModal entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
+      )}
     </div>
   );
 }

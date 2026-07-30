@@ -44,6 +44,29 @@ export async function POST(request: Request) {
   try {
     // userId는 클라이언트가 보낸 값을 쓰지 않고, 로그인 토큰에서 검증된 값만 사용한다.
     const { client: supabase, userId } = await getAuthenticatedUser(request);
+
+    // 같은 사용자가 짧은 시간 안에 같은 일기 내용으로 다시 제출하면(재시도/중복 클릭 등)
+    // 새 이미지를 또 생성/저장하지 않고 방금 저장된 항목을 그대로 반환한다.
+    const dedupWindowStart = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: recentDuplicate } = await supabase
+      .from("diary_entries")
+      .select("id, created_at, image_url")
+      .eq("user_id", userId)
+      .eq("diary_text", diaryText)
+      .gte("created_at", dedupWindowStart)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentDuplicate) {
+      return NextResponse.json({
+        id: recentDuplicate.id,
+        createdAt: recentDuplicate.created_at,
+        imageUrl: recentDuplicate.image_url,
+        deduplicated: true,
+      });
+    }
+
     const { buffer, contentType, extension } = parseDataUrl(imageDataUrl);
 
     const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;

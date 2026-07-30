@@ -10,15 +10,25 @@ const MAX_REFERENCE_IMAGES = 8;
 const REFERENCE_CONSISTENCY_SUFFIX =
   "Keep the same dog's fur color, face shape, and markings as the reference image consistently across all 4 panels.";
 
+// 매번 조금씩 다르게 쓰지 않도록, 그림체는 항상 이 문장 그대로 고정한다.
+const FIXED_ART_STYLE =
+  "Art style: soft watercolor illustration with pastel tones, gentle textured brush strokes, warm and cozy children's-book atmosphere. Keep this exact art style consistent across all 4 panels.";
+
 type Quad = [string, string, string, string];
 
 /** 4개의 scene_en으로 하나의 2x2 그리드 이미지 프롬프트를 만든다.
  * 말풍선은 그리지 않는다 — 순수한 장면(배경+강아지)만 그리게 하고,
- * 대사(dialogue_ko)는 화면 하단에 자막 형태로 HTML/CSS 오버레이한다. */
-function buildGridPrompt(scenes: Quad, hasReference: boolean): string {
+ * 대사(dialogue_ko)는 화면 하단에 자막 형태로 HTML/CSS 오버레이한다.
+ * 강아지 생김새는 매번 AI가 새로 추측하지 않도록, profiles.dog_appearance에
+ * 고정 저장해둔 문장을 참고 사진과 함께 항상 그대로 전달한다. */
+function buildGridPrompt(scenes: Quad, hasReference: boolean, dogAppearance: string): string {
   const labels = ["top-left", "top-right", "bottom-left", "bottom-right"];
   const parts = [
     "A single square image divided into an even 2x2 grid of 4 panels, with a thin white border separating each panel.",
+    FIXED_ART_STYLE,
+    dogAppearance
+      ? `The dog in every panel looks exactly like this: ${dogAppearance}. Keep this exact appearance consistent across all 4 panels.`
+      : "",
     hasReference ? REFERENCE_CONSISTENCY_SUFFIX : "",
     "Do not draw any speech bubbles, text, letters, or writing anywhere in the image — just the scenes themselves.",
     ...scenes.map((scene, i) => `Panel ${i + 1} (${labels[i]}): ${scene}`),
@@ -42,6 +52,7 @@ type RequestBody = {
   scenes?: unknown;
   dialogues?: unknown;
   referenceImages?: unknown;
+  dogAppearance?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -98,7 +109,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const prompt = buildGridPrompt(scenes as [string, string, string, string], referenceImages.length > 0);
+  const dogAppearance = typeof body.dogAppearance === "string" ? body.dogAppearance.trim() : "";
+
+  const prompt = buildGridPrompt(
+    scenes as [string, string, string, string],
+    referenceImages.length > 0,
+    dogAppearance,
+  );
 
   try {
     const { prediction, usage } = await runPrediction(

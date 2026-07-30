@@ -11,6 +11,7 @@ export type Profile = {
   dog_breed: string | null;
   dog_traits: string[];
   photo_url: string | null;
+  dog_appearance: string | null;
   created_at: string;
 };
 
@@ -27,7 +28,7 @@ export function useAuthProfile() {
     const supabase = getSupabaseBrowserClient();
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, dog_name, dog_breed, dog_traits, photo_url, created_at")
+      .select("id, email, dog_name, dog_breed, dog_traits, photo_url, dog_appearance, created_at")
       .eq("id", userId)
       .maybeSingle();
 

@@ -5,19 +5,11 @@ import type { ChangeEvent, DragEvent } from "react";
 import Link from "next/link";
 import type { Profile } from "@/hooks/useAuthProfile";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { ComicGrid } from "@/components/ComicGrid";
 
 const MAX_PHOTOS = 2;
 const MAX_DIARY_LENGTH = 150;
 const DOG_PHOTOS_BUCKET = "dog-photos";
-
-/** 2x2 그리드의 각 분면 하단에 자막 캡션 바를 고정 배치하기 위한 위치(%).
- * AI 그림 내용과 무관하게 항상 같은 자리(패널 하단 20%)에 표시한다. */
-const CAPTION_POSITIONS = [
-  { top: "40%", bottom: "50%", left: "3%", right: "53%" },
-  { top: "40%", bottom: "50%", left: "53%", right: "3%" },
-  { top: "90%", bottom: "0%", left: "3%", right: "53%" },
-  { top: "90%", bottom: "0%", left: "53%", right: "3%" },
-];
 
 type Photo = {
   id: string;
@@ -145,6 +137,7 @@ export default function ComicCreatorApp({
     scenes: string[],
     dialogues: string[],
     referenceImages: string[],
+    dogAppearance: string | null,
   ): Promise<string | null> => {
     setGridResult({ image: null, isLoading: true, error: "", usage: null });
 
@@ -152,7 +145,7 @@ export default function ComicCreatorApp({
       const response = await fetch("/api/generate-grid-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenes, dialogues, referenceImages }),
+        body: JSON.stringify({ scenes, dialogues, referenceImages, dogAppearance }),
       });
 
       const data = await response.json();
@@ -287,7 +280,12 @@ export default function ComicCreatorApp({
       const dialogues = sortedPanels.map((p) => p.dialogue_ko);
 
       // 2x2 그리드 1장을 한 번의 API 호출로 생성하고, 성공하면 자동 저장한다.
-      const gridImage = await generateGridImage(scenes, dialogues, referenceImages);
+      const gridImage = await generateGridImage(
+        scenes,
+        dialogues,
+        referenceImages,
+        profile.dog_appearance,
+      );
       if (gridImage) {
         void saveComicEntry(dogName, diary, newComic, gridImage);
       }
@@ -531,31 +529,7 @@ export default function ComicCreatorApp({
 
             {gridResult.image && (
               <>
-                <div className="relative aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={gridResult.image}
-                    alt={`${comic.title} 2x2 그리드`}
-                    className="h-full w-full object-cover"
-                  />
-                  {/* 대사는 AI가 그리지 않고(순수 장면만 생성), 각 패널 하단에 고정된
-                      자막 캡션 바로 겹쳐서 표시한다 — AI 그림 내용과 무관하게 항상 같은 위치. */}
-                  {sortedComicPanels.map((panel, i) => (
-                    <div
-                      key={panel.panel}
-                      className="pointer-events-none absolute flex items-end justify-center px-2 pb-1.5 sm:px-3 sm:pb-2"
-                      style={{
-                        ...CAPTION_POSITIONS[i],
-                        background:
-                          "linear-gradient(to top, rgba(255,250,240,0.92) 40%, rgba(255,250,240,0))",
-                      }}
-                    >
-                      <p className="w-full text-center text-[11px] font-diary font-bold leading-snug text-[#332a24] sm:text-sm">
-                        {panel.dialogue_ko}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                <ComicGrid imageUrl={gridResult.image} panels={sortedComicPanels} title={comic.title} />
 
                 {gridResult.usage && (
                   <p className="mt-2 text-center text-xs text-[#c9a9a0]">
