@@ -10,14 +10,13 @@ const MAX_PHOTOS = 2;
 const MAX_DIARY_LENGTH = 150;
 const DOG_PHOTOS_BUCKET = "dog-photos";
 
-/** 2x2 그리드의 각 분면 상단에 말풍선을 겹쳐 그리기 위한 위치(%).
- * AI가 그리는 빈 말풍선의 좌/우 위치는 생성할 때마다 조금씩 달라질 수 있어서,
- * 패널 상단 폭 대부분을 덮는 넓은 영역으로 잡아 어느 쪽에 그려지든 겹치게 한다. */
-const BUBBLE_POSITIONS = [
-  { top: "6%", left: "4%", right: "52%" },
-  { top: "6%", left: "52%", right: "4%" },
-  { top: "56%", left: "4%", right: "52%" },
-  { top: "56%", left: "52%", right: "4%" },
+/** 2x2 그리드의 각 분면 하단에 자막 캡션 바를 고정 배치하기 위한 위치(%).
+ * AI 그림 내용과 무관하게 항상 같은 자리(패널 하단 20%)에 표시한다. */
+const CAPTION_POSITIONS = [
+  { top: "40%", bottom: "50%", left: "3%", right: "53%" },
+  { top: "40%", bottom: "50%", left: "53%", right: "3%" },
+  { top: "90%", bottom: "0%", left: "3%", right: "53%" },
+  { top: "90%", bottom: "0%", left: "53%", right: "3%" },
 ];
 
 type Photo = {
@@ -539,18 +538,21 @@ export default function ComicCreatorApp({
                     alt={`${comic.title} 2x2 그리드`}
                     className="h-full w-full object-cover"
                   />
-                  {/* 대사는 AI가 그리지 않고, 이 위에 HTML/CSS로 말풍선을 겹쳐서 표시한다
-                      (한글 텍스트를 AI 이미지 안에 직접 렌더링하면 글자가 깨진다). */}
+                  {/* 대사는 AI가 그리지 않고(순수 장면만 생성), 각 패널 하단에 고정된
+                      자막 캡션 바로 겹쳐서 표시한다 — AI 그림 내용과 무관하게 항상 같은 위치. */}
                   {sortedComicPanels.map((panel, i) => (
                     <div
                       key={panel.panel}
-                      className="pointer-events-none absolute flex justify-center"
-                      style={BUBBLE_POSITIONS[i]}
+                      className="pointer-events-none absolute flex items-end justify-center px-2 pb-1.5 sm:px-3 sm:pb-2"
+                      style={{
+                        ...CAPTION_POSITIONS[i],
+                        background:
+                          "linear-gradient(to top, rgba(255,250,240,0.92) 40%, rgba(255,250,240,0))",
+                      }}
                     >
-                      <div className="relative max-w-full rounded-xl border border-[#e8d9d2] bg-white/95 px-2.5 py-1.5 text-center text-[10px] font-diary leading-snug text-[#4a3b32] shadow-sm sm:px-3 sm:py-2 sm:text-sm">
+                      <p className="w-full text-center text-[11px] font-diary font-bold leading-snug text-[#332a24] sm:text-sm">
                         {panel.dialogue_ko}
-                        <span className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-[7px] border-t-[9px] border-x-transparent border-t-white/95" />
-                      </div>
+                      </p>
                     </div>
                   ))}
                 </div>

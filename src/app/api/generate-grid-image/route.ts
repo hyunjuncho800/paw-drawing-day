@@ -10,20 +10,17 @@ const MAX_REFERENCE_IMAGES = 8;
 const REFERENCE_CONSISTENCY_SUFFIX =
   "Keep the same dog's fur color, face shape, and markings as the reference image consistently across all 4 panels.";
 
-const SPEECH_BUBBLE_INSTRUCTION =
-  "For each panel, draw one empty rounded speech bubble shape in the exact same location in every panel: horizontally centered, near the top of the panel (roughly the top 15-40% of the panel's height), a blank white bubble with no text, letters, or writing inside it, with a small triangular tail pointing downward toward the character. Keep every bubble's interior completely blank — the dialogue text will be added separately outside the image, so do not render any characters or writing inside the bubbles.";
-
 type Quad = [string, string, string, string];
 
 /** 4개의 scene_en으로 하나의 2x2 그리드 이미지 프롬프트를 만든다.
- * 대사(dialogue_ko)는 AI가 그리지 않는다 — 한글 텍스트 렌더링이 부정확해서,
- * 빈 말풍선 "모양"만 그리게 하고 실제 텍스트는 화면에서 HTML/CSS로 오버레이한다. */
+ * 말풍선은 그리지 않는다 — 순수한 장면(배경+강아지)만 그리게 하고,
+ * 대사(dialogue_ko)는 화면 하단에 자막 형태로 HTML/CSS 오버레이한다. */
 function buildGridPrompt(scenes: Quad, hasReference: boolean): string {
   const labels = ["top-left", "top-right", "bottom-left", "bottom-right"];
   const parts = [
     "A single square image divided into an even 2x2 grid of 4 panels, with a thin white border separating each panel.",
     hasReference ? REFERENCE_CONSISTENCY_SUFFIX : "",
-    SPEECH_BUBBLE_INSTRUCTION,
+    "Do not draw any speech bubbles, text, letters, or writing anywhere in the image — just the scenes themselves.",
     ...scenes.map((scene, i) => `Panel ${i + 1} (${labels[i]}): ${scene}`),
   ];
   return parts.filter(Boolean).join(" ");
