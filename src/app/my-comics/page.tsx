@@ -185,8 +185,7 @@ function ComicsList({ accessToken }: { accessToken: string }) {
                       imageUrl={entry.image_url}
                       panels={entry.comic_json.panels}
                       title={entry.comic_json?.title ?? entry.dog_name}
-                      textSizeClassName="text-[4px] leading-[1.1] sm:text-[5px]"
-                      captionPaddingClassName="px-0.5 pb-0.5"
+                      size="thumbnail"
                     />
                   ) : entry.image_url ? (
                     <div className="aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">

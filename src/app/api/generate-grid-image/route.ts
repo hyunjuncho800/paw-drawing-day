@@ -12,7 +12,7 @@ const REFERENCE_CONSISTENCY_SUFFIX =
 
 // 매번 조금씩 다르게 쓰지 않도록, 그림체는 항상 이 문장 그대로 고정한다.
 const FIXED_ART_STYLE =
-  "Art style: soft watercolor illustration with pastel tones, gentle textured brush strokes, warm and cozy children's-book atmosphere. Keep this exact art style consistent across all 4 panels.";
+  "Art style: Korean Instatoon style, cute digital webtoon illustration, bold clean outlines, vibrant flat colors, adorable simple character design, high contrast, clean white background. Keep this exact art style consistent across all 4 panels.";
 
 type Quad = [string, string, string, string];
 
