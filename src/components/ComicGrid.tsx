@@ -14,10 +14,11 @@ const CAPTION_POSITIONS = [
 ];
 
 /** 표시 크기(상세/모달 vs 목록 썸네일)에 따른 기본 폰트 크기 단계.
- * 대사 길이가 길어지면 이 기본값에서 한 단계씩 더 줄어든다. */
+ * 대사 길이가 길어지면 이 기본값에서 한 단계씩 더 줄어든다.
+ * 그림보다 글씨가 더 눈에 띄지 않도록 전반적으로 작게 유지한다. */
 const FONT_SIZE_TIERS: Record<"full" | "thumbnail", string[]> = {
-  full: ["text-sm sm:text-base", "text-xs sm:text-sm", "text-[11px] sm:text-xs", "text-[10px] sm:text-[11px]"],
-  thumbnail: ["text-[5px] sm:text-[6px]", "text-[4.5px] sm:text-[5px]", "text-[4px] sm:text-[4.5px]", "text-[3.5px] sm:text-[4px]"],
+  full: ["text-xs sm:text-sm", "text-[11px] sm:text-xs", "text-[10px] sm:text-[11px]", "text-[9px] sm:text-[10px]"],
+  thumbnail: ["text-[4.5px] sm:text-[5px]", "text-[4px] sm:text-[4.5px]", "text-[3.5px] sm:text-[4px]", "text-[3px] sm:text-[3.5px]"],
 };
 
 function captionFontSizeClass(text: string, size: "full" | "thumbnail"): string {
@@ -44,8 +45,8 @@ export function ComicGrid({
   size?: "full" | "thumbnail";
 }) {
   const sortedPanels = panels.slice().sort((a, b) => a.panel - b.panel);
-  const cardPadding = size === "thumbnail" ? "px-1 py-0.5" : "px-3 py-2 sm:px-3.5 sm:py-2.5";
-  const tailSize = size === "thumbnail" ? "border-x-[2px] border-b-[3px]" : "border-x-[6px] border-b-[8px]";
+  const cardPadding = size === "thumbnail" ? "px-1 py-0.5" : "px-2.5 py-1.5 sm:px-3 sm:py-1.5";
+  const tailSize = size === "thumbnail" ? "border-x-[2px] border-b-[3px]" : "border-x-[5px] border-b-[6px]";
 
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
@@ -58,18 +59,19 @@ export function ComicGrid({
           style={CAPTION_POSITIONS[i]}
         >
           <div
-            className={`relative max-w-full rounded-2xl border border-white/60 bg-[#fffaf0]/95 shadow-[0_2px_8px_rgba(120,90,70,0.25)] ${cardPadding}`}
+            className={`relative max-w-full rounded-xl border border-white/50 bg-[#fffaf0]/85 shadow-[0_1px_4px_rgba(120,90,70,0.18)] ${cardPadding}`}
           >
             {/* 말풍선 꼬리: 카드 위쪽에서 강아지 쪽을 향해 살짝 튀어나온 삼각형 */}
             <span
-              className={`absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 border-x-transparent border-b-[#fffaf0]/95 ${tailSize}`}
+              className={`absolute bottom-full left-1/2 h-0 w-0 -translate-x-1/2 border-x-transparent border-b-[#fffaf0]/85 ${tailSize}`}
             />
             <p
-              className={`text-center font-diary font-bold text-[#332a24] ${captionFontSizeClass(panel.dialogue_ko, size)}`}
+              className={`text-center font-diary font-semibold text-[#4a3b32] ${captionFontSizeClass(panel.dialogue_ko, size)}`}
               style={{
                 wordBreak: "keep-all",
+                overflowWrap: "break-word",
                 whiteSpace: "pre-wrap",
-                lineHeight: 1.35,
+                lineHeight: 1.3,
               }}
             >
               {panel.dialogue_ko}

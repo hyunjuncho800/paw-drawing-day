@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
+export type PhotoFaceCrop = { left: number; top: number; width: number; height: number };
+
 export type Profile = {
   id: string;
   email: string;
@@ -11,7 +13,9 @@ export type Profile = {
   dog_breed: string | null;
   dog_traits: string[];
   photo_url: string | null;
+  photo_urls: string[];
   dog_appearance: string | null;
+  photo_face_crop: PhotoFaceCrop | null;
   created_at: string;
 };
 
@@ -28,7 +32,9 @@ export function useAuthProfile() {
     const supabase = getSupabaseBrowserClient();
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, dog_name, dog_breed, dog_traits, photo_url, dog_appearance, created_at")
+      .select(
+        "id, email, dog_name, dog_breed, dog_traits, photo_url, photo_urls, dog_appearance, photo_face_crop, created_at",
+      )
       .eq("id", userId)
       .maybeSingle();
 

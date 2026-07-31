@@ -3,13 +3,39 @@
 import { useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import Link from "next/link";
-import type { Profile } from "@/hooks/useAuthProfile";
+import type { Profile, PhotoFaceCrop } from "@/hooks/useAuthProfile";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { ComicGrid } from "@/components/ComicGrid";
 
 const MAX_PHOTOS = 2;
 const MAX_DIARY_LENGTH = 150;
 const DOG_PHOTOS_BUCKET = "dog-photos";
+
+/** 프로필 사진에서 얼굴 부분만(0~1 비율 좌표) 잘라 별도의 참고 이미지로 만든다.
+ * 전신 사진 한 장만으로는 얼굴이 작아서 AI가 이목구비 무늬를 놓치기 쉬워서,
+ * 같은 사진에서 얼굴 클로즈업을 추가로 잘라 함께 전달한다. */
+async function cropImageToDataUrl(imageUrl: string, crop: PhotoFaceCrop): Promise<string> {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("이미지를 불러오지 못했어요."));
+    img.src = imageUrl;
+  });
+
+  const sx = crop.left * img.naturalWidth;
+  const sy = crop.top * img.naturalHeight;
+  const sw = crop.width * img.naturalWidth;
+  const sh = crop.height * img.naturalHeight;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("캔버스를 사용할 수 없어요.");
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  return canvas.toDataURL("image/jpeg", 0.9);
+}
 
 type Photo = {
   id: string;
@@ -268,13 +294,30 @@ export default function ComicCreatorApp({
       const newComic: Comic = data.comic;
       setComic(newComic);
 
-      // 프로필에 등록해둔 대표 사진을 우선 참고 이미지로 쓰고, 이번에 새로 올린 사진(들)을 이어 붙인다.
+      // 프로필에 등록해둔 사진을 전부(여러 각도) 참고 이미지로 쓰고, 이번에 새로 올린 사진(들)을 이어 붙인다.
+      // 여러 각도를 함께 전달할수록 AI가 얼굴 무늬 같은 디테일을 더 정확히 재현한다.
+      // 전신 사진만으로는 얼굴이 작아서, 얼굴 클로즈업(있다면)도 추가로 함께 전달한다.
       const uploadedReferenceImages = await Promise.all(
         photos.map((photo) => uploadReferenceImage(photo.file)),
       );
-      const referenceImages = profile.photo_url
-        ? [profile.photo_url, ...uploadedReferenceImages]
-        : uploadedReferenceImages;
+      let faceCloseupImage: string | null = null;
+      if (profile.photo_url && profile.photo_face_crop) {
+        try {
+          faceCloseupImage = await cropImageToDataUrl(profile.photo_url, profile.photo_face_crop);
+        } catch {
+          faceCloseupImage = null;
+        }
+      }
+      const profilePhotos = profile.photo_urls.length > 0
+        ? profile.photo_urls
+        : profile.photo_url
+          ? [profile.photo_url]
+          : [];
+      const profileReferenceImages = [
+        ...profilePhotos,
+        ...(faceCloseupImage ? [faceCloseupImage] : []),
+      ];
+      const referenceImages = [...profileReferenceImages, ...uploadedReferenceImages];
       const sortedPanels = newComic.panels.slice().sort((a, b) => a.panel - b.panel);
       const scenes = sortedPanels.map((p) => p.scene_en);
       const dialogues = sortedPanels.map((p) => p.dialogue_ko);

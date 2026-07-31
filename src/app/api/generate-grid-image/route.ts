@@ -8,7 +8,7 @@ const GRID_MODEL_SLUG = "google/nano-banana";
 const MAX_REFERENCE_IMAGES = 8;
 
 const REFERENCE_CONSISTENCY_SUFFIX =
-  "Keep the same dog's fur color, face shape, and markings as the reference image consistently across all 4 panels.";
+  "This must be the EXACT same dog as the reference image — preserve the precise facial marking pattern, not just a similar-looking dog of the same breed. Match the exact position and shape of black patches on the face. Keep the same dog's fur color, face shape, and markings consistently across all 4 panels.";
 
 // 매번 조금씩 다르게 쓰지 않도록, 그림체는 항상 이 문장 그대로 고정한다.
 const FIXED_ART_STYLE =

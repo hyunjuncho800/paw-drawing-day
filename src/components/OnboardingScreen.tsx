@@ -6,6 +6,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import type { Profile } from "@/hooks/useAuthProfile";
 
 const DOG_PHOTOS_BUCKET = "dog-photos";
+const MAX_PHOTOS = 4;
 
 const TRAIT_OPTIONS = [
   "활발함",
@@ -48,8 +49,8 @@ export default function OnboardingScreen({
   const [dogName, setDogName] = useState("");
   const [dogBreed, setDogBreed] = useState("");
   const [selectedTraits, setSelectedTraits] = useState<Set<string>>(new Set());
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [photoPreviewUrls, setPhotoPreviewUrls] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -66,9 +67,21 @@ export default function OnboardingScreen({
   };
 
   const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    setPhotoFile(file);
-    setPhotoPreviewUrl(file ? URL.createObjectURL(file) : "");
+    const newFiles = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (newFiles.length === 0) return;
+
+    const combined = [...photoFiles, ...newFiles].slice(0, MAX_PHOTOS);
+    setPhotoFiles(combined);
+    setPhotoPreviewUrls(combined.map((f) => URL.createObjectURL(f)));
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotoFiles((prev) => prev.filter((_, i) => i !== index));
+    setPhotoPreviewUrls((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -91,15 +104,15 @@ export default function OnboardingScreen({
       return;
     }
 
-    let photoUrl: string | null = null;
-
-    if (photoFile) {
-      const ext = photoFile.name.split(".").pop() || "jpg";
+    // 여러 각도 사진을 다 올려두면 만화 생성 시 모두 참고 이미지로 써서 정확도가 올라간다.
+    const photoUrls: string[] = [];
+    for (const file of photoFiles) {
+      const ext = file.name.split(".").pop() || "jpg";
       const path = `${currentSession.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from(DOG_PHOTOS_BUCKET)
-        .upload(path, photoFile, { upsert: false });
+        .upload(path, file, { upsert: false });
 
       if (uploadError) {
         setIsSubmitting(false);
@@ -108,7 +121,7 @@ export default function OnboardingScreen({
       }
 
       const { data: publicUrlData } = supabase.storage.from(DOG_PHOTOS_BUCKET).getPublicUrl(path);
-      photoUrl = publicUrlData.publicUrl;
+      photoUrls.push(publicUrlData.publicUrl);
     }
 
     const { data, error } = await supabase
@@ -119,9 +132,10 @@ export default function OnboardingScreen({
         dog_name: dogName.trim(),
         dog_breed: dogBreed.trim() || null,
         dog_traits: Array.from(selectedTraits),
-        photo_url: photoUrl,
+        photo_url: photoUrls[0] ?? null,
+        photo_urls: photoUrls,
       })
-      .select("id, email, dog_name, dog_breed, dog_traits, photo_url, created_at")
+      .select("id, email, dog_name, dog_breed, dog_traits, photo_url, photo_urls, dog_appearance, photo_face_crop, created_at")
       .single();
 
     setIsSubmitting(false);
@@ -192,41 +206,51 @@ export default function OnboardingScreen({
           </div>
 
           <div>
-            <label
-              htmlFor="onboardingDogPhoto"
-              className="mb-2 flex items-center gap-1.5 text-sm font-bold text-[#8a5a44]"
-            >
-              📷 대표 사진 <span className="font-normal text-[#c9a9a0]">(선택)</span>
+            <label className="mb-2 flex items-center gap-1.5 text-sm font-bold text-[#8a5a44]">
+              📷 사진 <span className="font-normal text-[#c9a9a0]">(선택, 최대 {MAX_PHOTOS}장)</span>
             </label>
-            <div className="flex items-center gap-3">
-              {photoPreviewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={photoPreviewUrl}
-                  alt="강아지 사진 미리보기"
-                  className="h-16 w-16 flex-shrink-0 rounded-2xl border-2 border-[#cfe8f5] object-cover"
-                />
-              ) : (
-                <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-[#fcdce7] bg-[#fff8fa] text-2xl">
-                  🐶
+            <div className="flex flex-wrap items-center gap-3">
+              {photoPreviewUrls.map((url, i) => (
+                <div key={url} className="relative h-16 w-16 flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={url}
+                    alt={`강아지 사진 ${i + 1}`}
+                    className="h-full w-full rounded-2xl border-2 border-[#cfe8f5] object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(i)}
+                    aria-label="사진 삭제"
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/50 text-xs text-white transition hover:bg-black/70"
+                  >
+                    ×
+                  </button>
                 </div>
+              ))}
+
+              {photoFiles.length < MAX_PHOTOS && (
+                <>
+                  <label
+                    htmlFor="onboardingDogPhoto"
+                    className="flex h-16 w-16 flex-shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-dashed border-[#fcdce7] bg-[#fff8fa] text-[#8a5a44] transition hover:bg-[#ffeef4]"
+                  >
+                    <span className="text-xl">+</span>
+                    <span className="text-[10px]">추가</span>
+                  </label>
+                  <input
+                    id="onboardingDogPhoto"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                  />
+                </>
               )}
-              <label
-                htmlFor="onboardingDogPhoto"
-                className="cursor-pointer rounded-full border-2 border-[#fcdce7] bg-[#fff8fa] px-4 py-2 text-xs font-semibold text-[#8a5a44] transition hover:bg-[#ffeef4]"
-              >
-                사진 선택하기
-              </label>
-              <input
-                id="onboardingDogPhoto"
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoChange}
-                className="hidden"
-              />
             </div>
             <p className="mt-1.5 text-xs text-[#c9a9a0]">
-              등록해두면 앞으로 만화를 만들 때마다 자동으로 참고 사진으로 사용돼요.
+              여러 각도(정면, 클로즈업 등)의 사진을 올려두면 만화 속 강아지 얼굴이 더 정확하게 재현돼요.
             </p>
           </div>
 
