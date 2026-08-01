@@ -6,6 +6,7 @@ import { useAuthProfile } from "@/hooks/useAuthProfile";
 import LoginScreen from "@/components/LoginScreen";
 import OnboardingScreen from "@/components/OnboardingScreen";
 import { ComicGrid, type ComicPanel } from "@/components/ComicGrid";
+import { useComicImageSaver } from "@/lib/useComicImageSaver";
 
 type ComicJson = { title?: string; panels?: ComicPanel[] } | null;
 
@@ -15,6 +16,8 @@ type ComicEntry = {
   diary_text: string;
   comic_json: ComicJson;
   image_url: string | null;
+  /** 그림+대사가 합쳐진 완성본. 있으면 항상 이걸 우선 표시한다(레거시 데이터는 없을 수 있음). */
+  image_url_final: string | null;
   created_at: string;
 };
 
@@ -38,6 +41,11 @@ function LoadingScreen() {
 /** 목록에서 클릭한 만화를 원본 크기로 크게 보여주는 모달.
  * 미리보기는 대사/일기 텍스트를 2줄로 잘라 보여주지만, 여기서는 전체가 다 보인다. */
 function ComicDetailModal({ entry, onClose }: { entry: ComicEntry; onClose: () => void }) {
+  const imageSaver = useComicImageSaver(entry.dog_name);
+  const panels = entry.comic_json?.panels ?? [];
+  const title = entry.comic_json?.title ?? entry.dog_name;
+  const canSaveImage = Boolean(entry.image_url_final || (entry.image_url && panels.length > 0));
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -73,22 +81,75 @@ function ComicDetailModal({ entry, onClose }: { entry: ComicEntry; onClose: () =
           </button>
         </div>
 
-        {entry.image_url && entry.comic_json?.panels ? (
-          <ComicGrid
-            imageUrl={entry.image_url}
-            panels={entry.comic_json.panels}
-            title={entry.comic_json?.title ?? entry.dog_name}
-          />
-        ) : entry.image_url ? (
-          <div className="aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
+        {entry.image_url_final ? (
+          <div className="relative aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={entry.image_url}
-              alt={entry.comic_json?.title ?? entry.dog_name}
+              src={entry.image_url_final}
+              alt={title}
               className="h-full w-full object-cover"
             />
           </div>
+        ) : entry.image_url && panels.length > 0 ? (
+          <ComicGrid imageUrl={entry.image_url} panels={panels} title={title} />
+        ) : entry.image_url ? (
+          <div className="aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={entry.image_url} alt={title} className="h-full w-full object-cover" />
+          </div>
         ) : null}
+
+        {canSaveImage && (
+          <>
+            <button
+              type="button"
+              onClick={() =>
+                void imageSaver.saveFull({
+                  finalImageUrl: entry.image_url_final,
+                  rawImageUrl: entry.image_url ?? "",
+                  panels,
+                  title,
+                })
+              }
+              disabled={imageSaver.busyKey === "full"}
+              className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-[#8fcbe8] to-[#f7a8c4] py-2.5 text-sm font-bold text-white shadow-md transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {imageSaver.busyKey === "full" ? "저장 준비 중..." : "🖼️ 이미지 저장하기"}
+            </button>
+
+            {panels.length > 0 && (
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {[0, 1, 2, 3].map((i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() =>
+                      void imageSaver.savePanel(
+                        {
+                          finalImageUrl: entry.image_url_final,
+                          rawImageUrl: entry.image_url ?? "",
+                          panels,
+                          title,
+                        },
+                        i,
+                      )
+                    }
+                    disabled={imageSaver.busyKey === `panel-${i}`}
+                    className="rounded-xl border-2 border-[#cfe8f5] bg-[#eef8fd] py-2 text-xs font-semibold text-[#5c8299] transition hover:bg-[#e4f4fb] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {imageSaver.busyKey === `panel-${i}` ? "..." : `컷${i + 1} ⬇`}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {imageSaver.message && (
+              <p className="mt-2 text-center text-xs font-semibold text-[#5c8299]">
+                {imageSaver.message}
+              </p>
+            )}
+          </>
+        )}
 
         <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-[#5c4438]">
           {entry.diary_text}
@@ -180,7 +241,16 @@ function ComicsList({ accessToken }: { accessToken: string }) {
                 className="flex gap-4 rounded-[2rem] border border-[#f6dfe4] bg-white/80 p-4 text-left shadow-[0_10px_40px_-15px_rgba(200,150,160,0.4)] backdrop-blur-sm transition hover:bg-white sm:p-5"
               >
                 <div className="w-24 flex-shrink-0 sm:w-32">
-                  {entry.image_url && entry.comic_json?.panels ? (
+                  {entry.image_url_final ? (
+                    <div className="aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={entry.image_url_final}
+                        alt={entry.comic_json?.title ?? entry.dog_name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  ) : entry.image_url && entry.comic_json?.panels ? (
                     <ComicGrid
                       imageUrl={entry.image_url}
                       panels={entry.comic_json.panels}

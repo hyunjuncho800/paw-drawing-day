@@ -38,20 +38,40 @@ export function ComicGrid({
   panels,
   title,
   size = "full",
+  pixelSize,
+  onImageReady,
+  onImageError,
 }: {
   imageUrl: string;
   panels: ComicPanel[];
   title: string;
   size?: "full" | "thumbnail";
+  /** 지정하면 이 정사각형 픽셀 크기로 고정 렌더링한다(html2canvas로 캡처할 때,
+   * aspect-ratio 유틸 클래스 대신 확실한 치수를 주기 위해 사용). */
+  pixelSize?: number;
+  onImageReady?: () => void;
+  onImageError?: () => void;
 }) {
   const sortedPanels = panels.slice().sort((a, b) => a.panel - b.panel);
   const cardPadding = size === "thumbnail" ? "px-1 py-0.5" : "px-2.5 py-1.5 sm:px-3 sm:py-1.5";
   const tailSize = size === "thumbnail" ? "border-x-[2px] border-b-[3px]" : "border-x-[5px] border-b-[6px]";
 
   return (
-    <div className="relative aspect-square w-full overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd]">
+    <div
+      className={`relative overflow-hidden rounded-2xl border-2 border-[#cfe8f5] bg-[#eef8fd] ${
+        pixelSize ? "" : "aspect-square w-full"
+      }`}
+      style={pixelSize ? { width: pixelSize, height: pixelSize } : undefined}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={imageUrl} alt={`${title} 2x2 그리드`} className="h-full w-full object-cover" />
+      <img
+        src={imageUrl}
+        alt={`${title} 2x2 그리드`}
+        className="h-full w-full object-cover"
+        crossOrigin={imageUrl.startsWith("data:") ? undefined : "anonymous"}
+        onLoad={onImageReady}
+        onError={onImageError}
+      />
       {sortedPanels.map((panel, i) => (
         <div
           key={panel.panel}

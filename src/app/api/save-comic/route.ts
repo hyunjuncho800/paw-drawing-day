@@ -8,6 +8,7 @@ type RequestBody = {
   diaryText?: unknown;
   comicJson?: unknown;
   imageDataUrl?: unknown;
+  imageDataUrlFinal?: unknown;
 };
 
 function parseDataUrl(dataUrl: string): { buffer: Buffer; contentType: string; extension: string } {
@@ -32,6 +33,8 @@ export async function POST(request: Request) {
   const dogName = typeof body.dogName === "string" ? body.dogName.trim() : "";
   const diaryText = typeof body.diaryText === "string" ? body.diaryText.trim() : "";
   const imageDataUrl = typeof body.imageDataUrl === "string" ? body.imageDataUrl : "";
+  const imageDataUrlFinal =
+    typeof body.imageDataUrlFinal === "string" ? body.imageDataUrlFinal : "";
   const comicJson = body.comicJson;
 
   if (!dogName || !diaryText || !imageDataUrl || !comicJson) {
@@ -50,7 +53,7 @@ export async function POST(request: Request) {
     const dedupWindowStart = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: recentDuplicate } = await supabase
       .from("diary_entries")
-      .select("id, created_at, image_url")
+      .select("id, created_at, image_url, image_url_final")
       .eq("user_id", userId)
       .eq("diary_text", diaryText)
       .gte("created_at", dedupWindowStart)
@@ -63,6 +66,7 @@ export async function POST(request: Request) {
         id: recentDuplicate.id,
         createdAt: recentDuplicate.created_at,
         imageUrl: recentDuplicate.image_url,
+        imageUrlFinal: recentDuplicate.image_url_final,
         deduplicated: true,
       });
     }
@@ -81,6 +85,30 @@ export async function POST(request: Request) {
     const { data: publicUrlData } = supabase.storage.from(COMICS_BUCKET).getPublicUrl(path);
     const imageUrl = publicUrlData.publicUrl;
 
+    // 완성본(그림+대사 텍스트가 합쳐진 이미지)은 있으면 별도 경로에 함께 저장한다.
+    // 실패해도 원본 저장/전체 흐름은 막지 않고, 완성본만 없는 채로 넘어간다.
+    let imageUrlFinal: string | null = null;
+    if (imageDataUrlFinal) {
+      try {
+        const finalParsed = parseDataUrl(imageDataUrlFinal);
+        const finalPath = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}-final.${finalParsed.extension}`;
+        const { error: finalUploadError } = await supabase.storage
+          .from(COMICS_BUCKET)
+          .upload(finalPath, finalParsed.buffer, {
+            contentType: finalParsed.contentType,
+            upsert: false,
+          });
+        if (!finalUploadError) {
+          const { data: finalPublicUrlData } = supabase.storage
+            .from(COMICS_BUCKET)
+            .getPublicUrl(finalPath);
+          imageUrlFinal = finalPublicUrlData.publicUrl;
+        }
+      } catch {
+        imageUrlFinal = null;
+      }
+    }
+
     const { data: inserted, error: insertError } = await supabase
       .from("diary_entries")
       .insert({
@@ -89,6 +117,7 @@ export async function POST(request: Request) {
         diary_text: diaryText,
         comic_json: comicJson,
         image_url: imageUrl,
+        image_url_final: imageUrlFinal,
       })
       .select("id, created_at")
       .single();
@@ -101,6 +130,7 @@ export async function POST(request: Request) {
       id: inserted.id,
       createdAt: inserted.created_at,
       imageUrl,
+      imageUrlFinal,
     });
   } catch (error) {
     if (error instanceof AuthError) {

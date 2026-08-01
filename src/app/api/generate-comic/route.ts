@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { getAuthenticatedUser, AuthError } from "@/lib/supabase";
+import { findTodayEntry, isAdminEmail } from "@/lib/dailyLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -95,6 +97,31 @@ export async function POST(request: Request) {
       { error: "강아지 이름과 오늘의 일기는 필수예요." },
       { status: 400 },
     );
+  }
+
+  // 하루 1회 제한(관리자 계정 제외): Claude를 호출하기 전에 먼저 확인해서 불필요한 비용을 막는다.
+  try {
+    const { client: supabase, userId, email } = await getAuthenticatedUser(request);
+
+    if (!isAdminEmail(email)) {
+      const { entry, nextResetAt } = await findTodayEntry(supabase, userId);
+      if (entry) {
+        return NextResponse.json(
+          {
+            error: `오늘은 이미 ${entry.dog_name}의 하루를 기록했어요! 내일 다시 와주세요 🐾`,
+            alreadyCreatedToday: true,
+            entry,
+            nextResetAt,
+          },
+          { status: 409 },
+        );
+      }
+    }
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    throw error;
   }
 
   const client = new Anthropic();

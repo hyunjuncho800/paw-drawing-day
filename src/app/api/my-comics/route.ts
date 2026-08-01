@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from("diary_entries")
-      .select("id, dog_name, diary_text, comic_json, image_url, created_at")
+      .select("id, dog_name, diary_text, comic_json, image_url, image_url_final, created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
